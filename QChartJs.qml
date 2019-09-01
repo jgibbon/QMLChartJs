@@ -55,6 +55,12 @@ Canvas {
     onChartAnimationProgressChanged: {
         requestInitPaint();
     }
+    onChartDataChanged: {
+        if(chartRenderHandler) {
+            chartRenderHandler = null;
+        }
+        requestInitPaint();
+    }
 
     MouseArea {
         id: event
@@ -68,21 +74,33 @@ Canvas {
             property int clientY: 0
             property string type: ""
         }
-        onPositionChanged: {
-            mouseEvent.type = "mousemove"
-            mouseEvent.clientX = mouse.x;
-            mouseEvent.clientY = mouse.y;
-            mouseEvent.left = 0;
-            mouseEvent.top = 0;
-            canvas.requestToolTipPaint();
+        onPressedChanged: {
+            if(!pressed) {
+                tooltipTimer.restart();
+            }
         }
-        onExited: {
-            mouseEvent.type = "mouseout"
-            mouseEvent.clientX = 0;
-            mouseEvent.clientY = 0;
-            mouseEvent.left = 0;
-            mouseEvent.top = 0;
-            canvas.requestToolTipPaint();
+
+        onPositionChanged: {
+            if(event.pressed) {
+                mouseEvent.type = "mousemove"
+                mouseEvent.clientX = mouse.x;
+                mouseEvent.clientY = mouse.y;
+                mouseEvent.left = 0;
+                mouseEvent.top = 0;
+                canvas.requestToolTipPaint();
+            }
+        }
+        Timer {
+            id: tooltipTimer
+            interval: 3000
+            onTriggered: {
+                event.mouseEvent.type = "mouseout"
+                event.mouseEvent.clientX = 0;
+                event.mouseEvent.clientY = 0;
+                event.mouseEvent.left = 0;
+                event.mouseEvent.top = 0;
+                canvas.requestToolTipPaint();
+            }
         }
     }
 

@@ -26,6 +26,8 @@ function newChartInstance(context, data, options, chartType) {
         return new ChartInstance(context).Bar(data, options);
     } else if (chartType === "Line") {
         return new ChartInstance(context).Line(data, options);
+    } else if (chartType === "DateLine") {
+        return new ChartInstance(context).DateLine(data, options);
     } else if (chartType === "Doughnut") {
         return new ChartInstance(context).Doughnut(data, options);
     } else if (chartType === "Pie") {
@@ -37,7 +39,7 @@ function newChartInstance(context, data, options, chartType) {
     } else if (chartType === "StackedBar") {
         return new ChartInstance(context).StackedBar(data, options);
     } else {
-        console.error("No supported Chart Type..Welcome to extend...Or check Chart.js for more extension!");
+        console.error("No supported Chart Type..Welcome to extend...Or check Chart.js for more extension!", chartType);
     }
 }
 
@@ -977,7 +979,6 @@ function newChartInstance(context, data, options, chartType) {
                                 xPositions.push(element.x);
                                 yPositions.push(element.y);
 
-
                                 //Include any colour information about the element
                                 tooltipLabels.push(helpers.template(this.options.multiTooltipTemplate, element));
                                 tooltipColors.push({
@@ -998,7 +999,6 @@ function newChartInstance(context, data, options, chartType) {
                                 y: (yMin + yMax) / 2
                             };
                         }).call(this, dataIndex);
-
                     new Chart.MultiTooltip({
                         x: medianPosition.x,
                         y: medianPosition.y,
@@ -1018,7 +1018,7 @@ function newChartInstance(context, data, options, chartType) {
                         labels: tooltipLabels,
                         legendColors: tooltipColors,
                         legendColorBackground: this.options.multiTooltipKeyBackground,
-                        title: ChartElements[0].label,
+                        title: this.options.xIsDate ? ('' + new Date(ChartElements[0].label).toLocaleString(Qt.locale(), Locale.ShortFormat)) : ChartElements[0].label,
                         chart: this.chart,
                         ctx: this.chart.ctx
                     }).draw();
@@ -1437,6 +1437,10 @@ function newChartInstance(context, data, options, chartType) {
             ctx.font = this.font;
             helpers.each(this.labels, function(label, index) {
                 ctx.fillStyle = this.textColor;
+                if(this.chart.datasets && this.chart.datasets[index].label) {
+
+                    label = this.chart.datasets[index].label
+                }
                 ctx.fillText(label, this.x + this.xPadding + this.fontSize + 3, this.getLineHeight(index + 1));
 
                 //A bit gnarly, but clearing this rectangle breaks when using explorercanvas (clears whole canvas)
@@ -1446,7 +1450,7 @@ function newChartInstance(context, data, options, chartType) {
                 ctx.fillStyle = this.legendColorBackground;
                 ctx.fillRect(this.x + this.xPadding, this.getLineHeight(index + 1) - this.fontSize / 2, this.fontSize, this.fontSize);
 
-                ctx.fillStyle = this.legendColors[index].fill;
+                ctx.fillStyle = this.legendColors[index].stroke;
                 ctx.fillRect(this.x + this.xPadding, this.getLineHeight(index + 1) - this.fontSize / 2, this.fontSize, this.fontSize);
 
 
@@ -1551,7 +1555,7 @@ function newChartInstance(context, data, options, chartType) {
 
 
             this.xScalePaddingRight = lastWidth / 2 + 3;
-            this.xScalePaddingLeft = (firstWidth / 2 > this.yLabelWidth + 10) ? firstWidth / 2 : this.yLabelWidth + 10;
+            this.xScalePaddingLeft = (firstWidth / 2 > this.yLabelWidth + 10) ? firstWidth / 2 : (this.yLabelWidth + 10 > 0 ? this.yLabelWidth + 10 : 0);
 
             this.xLabelRotation = 0;
             if (this.display) {
@@ -1596,17 +1600,24 @@ function newChartInstance(context, data, options, chartType) {
         drawingArea: function() {
             return this.startPoint - this.endPoint;
         },
-        calculateY: function(value) {
-            var scalingFactor = this.drawingArea() / (this.min - this.max);
-            return this.endPoint - (scalingFactor * (value - this.min));
-        },
-        calculateX: function(index) {
+       calculateY: function(value) {
+           var scalingFactor = this.drawingArea() / (this.min - this.max);
+           return this.endPoint - (scalingFactor * (value - this.min));
+       },
+        calculateX: function(index, value) {
             var isRotated = (this.xLabelRotation > 0),
                 // innerWidth = (this.offsetGridLines) ? this.width - offsetLeft - this.padding : this.width - (offsetLeft + halfLabelWidth * 2) - this.padding,
                 innerWidth = this.width - (this.xScalePaddingLeft + this.xScalePaddingRight),
                 valueWidth = innerWidth / (this.valuesCount - ((this.offsetGridLines) ? 0 : 1)),
-                valueOffset = (valueWidth * index) + this.xScalePaddingLeft;
+                valueOffset;
 
+            valueOffset = (valueWidth * index) + this.xScalePaddingLeft
+            if(this.xIsDate && value) {
+                var xScale = innerWidth / ( this.maxX - this.minX);
+                var x = (new Date(value).getTime() - this.minX) /(this.maxX-this.minX)*innerWidth;
+                valueOffset = x  + this.xScalePaddingLeft;
+
+            }
             if (this.offsetGridLines) {
                 valueOffset += (valueWidth / 2);
             }
@@ -1662,9 +1673,9 @@ function newChartInstance(context, data, options, chartType) {
                 }, this);
 
                 each(this.xLabels, function(label, index) {
-                    var xPos = this.calculateX(index) + aliasPixel(this.lineWidth),
+                    var xPos = this.calculateX(index, label) + aliasPixel(this.lineWidth),
                         // Check to see if line/bar here and decide where to place the line
-                        linePos = this.calculateX(index - (this.offsetGridLines ? 0.5 : 0)) + aliasPixel(this.lineWidth),
+                        linePos = this.calculateX(index - (this.offsetGridLines ? 0.5 : 0), label) + aliasPixel(this.lineWidth),
                         isRotated = (this.xLabelRotation > 0);
 
                     ctx.beginPath();
@@ -1701,6 +1712,9 @@ function newChartInstance(context, data, options, chartType) {
                     ctx.font = this.font;
                     ctx.textAlign = (isRotated) ? "right" : "center";
                     ctx.textBaseline = (isRotated) ? "middle" : "top";
+                    if(that.xIsDate) {
+                        label = new Date(label).toLocaleTimeString(Locale.ShortFormat)
+                    }
                     ctx.fillText(label, 0, 0);
                     ctx.restore();
                 }, this);
@@ -2568,8 +2582,10 @@ function newChartInstance(context, data, options, chartType) {
         datasetFill: true,
 
         //String - A legend template
-        legendTemplate: "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].strokeColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>"
+        legendTemplate: "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].strokeColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>",
 
+        //Boolean - X values (labels) are treated as dates
+        xIsDate: false
     };
 
 
@@ -2639,7 +2655,7 @@ function newChartInstance(context, data, options, chartType) {
 
                 this.eachPoints(function(point, index) {
                     helpers.extend(point, {
-                        x: this.scale.calculateX(index),
+                        x: this.scale.calculateX(index, data.labels[index]),
                         y: this.scale.endPoint
                     });
                     point.save();
@@ -2722,6 +2738,16 @@ function newChartInstance(context, data, options, chartType) {
                         this.integersOnly
                     );
                     helpers.extend(this, updatedRanges);
+                    if(scaleOptions.xIsDate) {//also calculate x range…
+                        var lbls = labels.map(function(el){return new Date(el).getTime();});
+                        var minX = Infinity;
+                        var maxX = -Infinity;
+                        helpers.each(lbls, function(lbl){
+                            if(lbl < minX) minX = lbl;
+                            if(lbl > maxX) maxX = lbl;
+                        });
+                        helpers.extend(this, {maxX: maxX, minX:minX});
+                    }
                 },
                 xLabels: labels,
                 font: helpers.fontString(this.options.scaleFontSize, this.options.scaleFontStyle, this.options.scaleFontFamily),
@@ -2731,7 +2757,8 @@ function newChartInstance(context, data, options, chartType) {
                 gridLineColor: (this.options.scaleShowGridLines) ? this.options.scaleGridLineColor : "rgba(0,0,0,0)",
                 padding: (this.options.showScale) ? 0 : this.options.pointDotRadius + this.options.pointDotStrokeWidth,
                 showLabels: this.options.scaleShowLabels,
-                display: this.options.showScale
+                display: this.options.showScale,
+                xIsDate: this.options.xIsDate
             };
 
             if (this.options.scaleOverride) {
@@ -2797,9 +2824,9 @@ function newChartInstance(context, data, options, chartType) {
                 previousPoint = function(point, collection, index) {
                     return helpers.findPreviousWhere(collection, hasValue, index) || point;
                 };
-
-            this.scale.draw(easingDecimal);
-
+            if(this.options.showScale) {
+                this.scale.draw(easingDecimal);
+            }
 
             helpers.each(this.datasets, function(dataset) {
                 var pointsWithValues = helpers.where(dataset.points, hasValue);
@@ -2811,7 +2838,7 @@ function newChartInstance(context, data, options, chartType) {
                     if (point.hasValue()) {
                         point.transition({
                             y: this.scale.calculateY(point.value),
-                            x: this.scale.calculateX(index)
+                            x: this.scale.calculateX(index, point.label)
                         }, easingDecimal);
                     }
                 }, this);
@@ -2894,6 +2921,18 @@ function newChartInstance(context, data, options, chartType) {
             }, this);
         }
     });
+
+
+
+    Chart.types.Line.extend({
+        name: "DateLine",
+        defaults: helpers.merge(defaultConfig, {
+            percentageInnerCutout: 0,
+            xIsDate: true
+        })
+    });
+
+
 
 
 }).call(this);
